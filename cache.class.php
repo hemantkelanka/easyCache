@@ -1,24 +1,32 @@
 <?php
 
 class EasyCache {
-	const DEFAULT_EXPIRY_TIME = 10;
 	const DEFAULT_CLEAR_MODE = 'all';
+	private $default_expire;
+	function __construct($config){
+		$this->default_expire = (@$config['expire'])?$config['expire']:10;
+		$host = $config['host'];
+		$username = $config['username'];
+		$password = $config['password'];
 
-	function __construct($host,$user,$pass){
-		$c = mysql_connect($host,$user,$pass) or die("Unable to connect cache db server!");
+		$c = mysql_connect($host, $username, $password) or die("Unable to connect cache db server!");
 		mysql_select_db("cache_system",$c);
 	}
 
 	public function get($key){
 		$sql="SELECT * FROM cache WHERE id = '".$key."' AND expire_on >= " . time();
-		$res = mysql_query(  $sql);
+		$res = mysql_query($sql);
 		$row = mysql_fetch_assoc( $res );
 		if($row){
 			return $row['content'];
 		}
+		return false;
 	}
 
-	public function save($key, $content, $expire=self::DEFAULT_EXPIRY_TIME, $tag =''){
+	public function save($key, $content, $expire = 0, $tag = ''){
+		if($expire==0){
+			$expire = $this->default_expire;
+		}
 		$md5_hash =  md5($content);
 		$qr = "INSERT INTO cache SET content = '".$content."', id= '".$key."', tag = '".$tag."', md5 ='".$md5_hash."', expire_on = ".(time()+$expire)." ON DUPLICATE KEY UPDATE content = '".$content."', md5 ='".$md5_hash."', expire_on = ".(time()+$expire);
 		if(mysql_query($qr))
@@ -35,14 +43,17 @@ class EasyCache {
 		}
 	}
 
-	public function refresh($type,$item, $expire=self::DEFAULT_EXPIRY_TIME){
-		$expire =  time()+$expire;
+	public function refresh($type,$item, $expire = 0){
+		if($expire==0){
+			$expire = $this->default_expire;
+		}
+		$expire_on =  time()+$expire;
 		switch($type){
 			case "key":
-			$this->_refresh_key($item, $expire);
+			$this->_refresh_key($item, $expire_on);
 			break;
 			case "tags":
-			$this->_refresh_tags($item, $expire);
+			$this->_refresh_tags($item, $expire_on);
 			break;
 		}
 	}
@@ -91,24 +102,5 @@ class EasyCache {
 				mysql_query($qr);
 			}
 		}
-	}
-}
-
-
-error_reporting(E_ALL ^ E_DEPRECATED);
-$cache =  new EasyCache("127.0.0.1","root","root");
-$key = 'abc';
-if($content = $cache->get($key)){
-	echo "Displaying from cache\n";
-	echo "Key:".$key."\n";
-	echo "Content:".$content."\n";
-}else{
-	$content = "Key of this cache is ". $key;
-	echo  "Key:".$key."\n";
-	echo  "Content:".$content."\n";
-	try{
-		$cache->save($key,$content,20);
-	}catch(Exception $e){
-		echo $e;
 	}
 }
